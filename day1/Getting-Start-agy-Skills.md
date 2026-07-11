@@ -1,54 +1,54 @@
 ---
-title: "Getting Started with Google Antigravity"
+title: "開始使用 Google Antigravity"
 source: "https://codelabs.developers.google.com/getting-started-google-antigravity?authuser=0#8"
 author:
 published:
 created: 2026-07-11
-description: "This codelab guides you through the process of installing and experiencing the features of Google Antigravity, a platform to work with agents that can perform both coding and non-coding tasks."
+description: "本 Codelab 將引導您安裝並體驗 Google Antigravity 的功能。Google Antigravity 是一個與可執行程式設計和非程式設計任務的 Agents 協作的平台。"
 tags:
   - "clippings"
 ---
 
-## Skills
+## 技能 (Skills)
 
-While Antigravity's underlying models are powerful generalists, they don't know your specific project context or team standards. Loading every single rule or tool into the agent's context window leads to tool bloat, higher costs, latency, and confusion.
+雖然 Antigravity 的底層模型是強大的通用模型，但它們並不了解您的特定專案上下文或團隊規範。將每一條規則或工具都載入到 Agent 的上下文視窗中會導致工具膨脹（tool bloat）、更高的成本、延遲以及混亂。
 
-Skills solve this through progressive disclosure. A **skill** is a specialized package of knowledge that sits dormant until needed. It is only loaded into the agent's context when your specific request matches the skill's description.
+技能（Skills）透過漸進式揭露（progressive disclosure）解決了這個問題。**技能**是一個專門的知識包，在需要之前保持休眠狀態。只有當您的特定請求與該技能的描述相匹配時，它才會被載入到 Agent 的上下文中。
 
-## Structure and Scope
+## 結構與範圍 (Structure and Scope)
 
-Skills are directory-based packages. You can define them in two scopes depending on your needs:
+技能是基於目錄的套件。您可以根據需要，在兩種範圍中定義它們：
 
-- Global Scope (`~/.gemini/config/skills/`): Available across all Antigravity products (Antigravity, Antigravity IDE, Antigravity CLI) and projects.
-- Project/Workspace Scope (`<project-root>/.agents/skills/`): This would make the skill available only within a specific project.
+- 全域範圍（`~/.gemini/config/skills/`）：適用於所有 Antigravity 產品（Antigravity、Antigravity IDE、Antigravity CLI）和專案。
+- 專案/工作區範圍（`<project-root>/.agents/skills/`）：這會使該技能僅在特定專案中可用。
 
-## The Anatomy of a Skill
+## 技能的結構剖析 (The Anatomy of a Skill)
 
-A typical skill directory looks like this:
+一個典型的技能目錄如下所示：
 
 ```
 my-skill/
-├── SKILL.md    #(Required) metadata & instructions.
-├── scripts/    # (Optional) Python or Bash scripts for execution.
-├── references/ # (Optional) text, documentation, or templates.
-└── assets/     # (Optional) Images or logos.
+├── SKILL.md    #（必填）中繼資料與指令。
+├── scripts/    #（選填）用於執行的 Python 或 Bash 腳本。
+├── references/ #（選填）文字、文件或範本。
+└── assets/     #（選填）圖片或標誌。
 ```
 
-Let's add some skills now.
+現在讓我們來新增一些技能。
 
-## Code Review Skill
+## 程式碼審查技能 (Code Review Skill)
 
-This is an instruction-only skill i.e. we only need to create the `SKILL.md` file, that will contain the metadata and the skills instructions. Let's create a skill that provides details to the agent to review code changes for bugs, style issues and best practices.
+這是一個僅包含指令的技能，也就是說我們只需要建立 `SKILL.md` 檔案，其中將包含中繼資料和技能指令。讓我們建立一個技能，為 Agent 提供審查程式碼變更中的錯誤（bugs）、風格問題和最佳實踐的詳細資訊。
 
-Assuming that you are in a specific project folder (e.g. `$HOME/agy2-projects/my-skills-project)` the first step is to create a directory in the project folder that will contain the skill.
+假設您在一個特定的專案資料夾中（例如 `my-skills-project`），第一步是在專案資料夾中建立一個將包含該技能的目錄。
 
 ```
 mkdir -p .agents/skills/code-review
 ```
 
-Create a `SKILL.md` file in the project folder e.g. `.agents/skills/code-review` that we just created, with the content shown below:
+在我們剛建立的專案資料夾（例如 `.agents/skills/code-review`）中建立一個 `SKILL.md` 檔案，內容如下所示：
 
-```
+```markdown
 ---
 name: code-review
 description: Reviews code changes for bugs, style issues, and best practices. Use when reviewing PRs or checking code quality.
@@ -72,23 +72,25 @@ When reviewing code, follow these steps:
 - Suggest alternatives when possible
 ```
 
-Notice that the `SKILL.md` file above contains the metadata (name and description) at the top and then the instructions. When the agent loads, it will only read the metadata of the skills and it will only load the full skills instructions, only when needed.
+請注意，上述 `SKILL.md` 檔案在頂部包含中繼資料（名稱與描述），接著是指令。當 Agent 啟動時，它只會讀取技能的中繼資料，並僅在需要時才載入完整的技能指令。
 
-Let us validate the **Code Review skill**. Open up a conversation in Antigravity in a specific project of your choice and provide the following prompt.
-
-![732820afe6db3ce0.png](https://codelabs.developers.google.com/static/getting-started-google-antigravity/img/732820afe6db3ce0_2880.png?authuser=0)
-
-It should show the **code-review** skill.
-
-### Try it out
-
-Create a new file named `demo_bad_code.py` in the `$HOME/agy2-projects/my-skills-project` with the contents shown below:
+讓我們來驗證 **Code Review 技能**。在您選擇的特定專案中開啟 Antigravity 對話，並輸入以下提示詞。
 
 ```
+which skills are installed?
+```
+
+它應該會顯示 **code-review** 技能。
+
+### 動手試試看
+
+在 `$HOME/agy2-projects/my-skills-project` 中建立一個名為 `demo_bad_code.py` 的新檔案，內容如下所示：
+
+```python
 import time
 
 def get_user_data(users, id):
-   # Find user by ID
+   # 根據 ID 尋找使用者
    for u in users:
        if u['id'] == id:
             return u
@@ -97,10 +99,10 @@ def get_user_data(users, id):
 def process_payments(items):
    total = 0
    for i in items:
-       # Calculate tax
+       # 計算稅額
        tax = i['price'] * 0.1
        total = total + i['price'] + tax
-       time.sleep(0.1) # Simulate slow network call
+       time.sleep(0.1) # 模擬緩慢的網路呼叫
 
    return total
 
@@ -109,7 +111,7 @@ def run_batch():
    items = [{'price': 10}, {'price': 20}, {'price': 100}]
 
    u = get_user_data(users, 3)
-   print("User found: " + u['name']) # Will crash if None
+   print("User found: " + u['name']) # 如果為 None 將會崩潰
 
    print("Total: " + str(process_payments(items)))
 
@@ -117,30 +119,30 @@ if __name__ == "__main__":
    run_batch()
 ```
 
-Open a new conversation in a specific project in Antigravity and give the following prompt: `review the @demo_bad_code.py file`.
+在 Antigravity 的特定專案中開啟一個新對話，並輸入以下提示詞：`review the @demo_bad_code.py file`。
 
-The Agent should identify the `code-review` skill, load the details and then perform the action as per the instructions given in the `code-review/SKILL.md` file.
+Agent 應該會識別出 `code-review` 技能，載入詳細資訊，然後根據 `code-review/SKILL.md` 檔案中給出的指令執行操作。
 
-A sample output is shown below:
+範例輸出如下所示：
 
 ![a6e2b1b775feda28.png](https://codelabs.developers.google.com/static/getting-started-google-antigravity/img/a6e2b1b775feda28_2880.png?authuser=0)
 
-## 10\. Conclusion
+## 10. 結論
 
-Congratulations! You have now successfully installed Antigravity, configured your environment, and learned how to control your agents.
+恭喜！您現在已成功安裝 Antigravity、配置了您的環境，並學會了如何控制您的 Agents。
 
-## Earn your Kaggle 5-Day AI Agents badge
+## 獲得您的 Kaggle 5-Day AI Agents 徽章
 
-Completed this lab as part of Kaggle's **5-Day AI Agents: Intensive Vibe Coding Course with Google**? Claim your completion badge: Get the [5-Day AI Agents badge](https://developers.google.com/profile/badges/events/cloud/five-day-ai-agents/award?authuser=0).
+完成本實驗是作為 Kaggle **5-Day AI Agents: Intensive Vibe Coding Course with Google** 的一部分嗎？領取您的完成徽章：[取得 5-Day AI Agents 徽章](https://developers.google.com/profile/badges/events/cloud/five-day-ai-agents/award?authuser=0)。
 
-**What's Next?** To see Antigravity in action building real-world applications, you can look at the following codelab:
+**下一步？** 若要觀看 Antigravity 實際建構真實世界應用程式，您可以參考以下 Codelab：
 
-- [Build and Deploy to Google Cloud with Antigravity](https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity?authuser=0): This codelab shows how to design, build, and deploy a serverless application to Google Cloud.
+- [使用 Antigravity 建構並部署至 Google Cloud](https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity?authuser=0)：本 Codelab 顯示如何設計、建構並部署無伺服器應用程式至 Google Cloud。
 
-## Reference docs
+## 參考文件
 
-- Official Site: [https://antigravity.google/](https://antigravity.google/?authuser=0)
-- Documentation: [https://antigravity.google/docs/home](https://antigravity.google/docs/home?authuser=0)
-- Use cases: [https://antigravity.google/use-cases](https://antigravity.google/use-cases?authuser=0)
-- Download: [https://antigravity.google/download](https://antigravity.google/download?authuser=0)
-- Youtube Channel for Google Antigravity: [https://www.youtube.com/@googleantigravity](https://www.youtube.com/@googleantigravity?authuser=0)
+- 官方網站：[https://antigravity.google/](https://antigravity.google/?authuser=0)
+- 說明文件：[https://antigravity.google/docs/home](https://antigravity.google/docs/home?authuser=0)
+- 使用案例：[https://antigravity.google/use-cases](https://antigravity.google/use-cases?authuser=0)
+- 下載：[https://antigravity.google/download](https://antigravity.google/download?authuser=0)
+- Google Antigravity YouTube 頻道：[https://www.youtube.com/@googleantigravity](https://www.youtube.com/@googleantigravity?authuser=0)
