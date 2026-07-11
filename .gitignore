@@ -53,6 +53,10 @@ sample-agent/
 # Logs
 *.log
 
+# JS
+node_modules/
+package-lock.json
+
 # API Keys and Secrets
 credentials.json
 secrets.json
