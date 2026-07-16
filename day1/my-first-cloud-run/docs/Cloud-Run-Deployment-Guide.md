@@ -71,6 +71,8 @@ EXPOSE 8080
    執行以下指令將容器運行在背景，並將本機的 `8080` 埠口對應至容器的 `8080` 埠口：
    ```bash
    docker run -d -p 8080:8080 --name logistics-test logistics-app
+   # 或者不取名字，自動命名
+   docker run -d -p 8080:8080 --rm logistics-app
    ```
 
 3. **網頁驗證**：
