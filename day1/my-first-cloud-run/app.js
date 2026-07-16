@@ -399,6 +399,7 @@ function startDispatchSimulation() {
 
   // Triggered at 100% traversal
   function finalizeSimulation() {
+    appState.animationFrameId = null;
     appState.dispatchState = 'completed';
     
     const vehicleStatus = document.getElementById('vehicle-status');
