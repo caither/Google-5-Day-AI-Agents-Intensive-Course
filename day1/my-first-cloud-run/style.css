@@ -341,6 +341,7 @@ body {
 
 /* Order Badge: Pending */
 .order-badge {
+  position: relative;
   background-color: var(--accent-orange);
   color: #ffffff;
   border: 2px solid #ffffff;
@@ -357,7 +358,7 @@ body {
 }
 
 /* Pulsing Ring for Pending Markers */
-.order-badge::after {
+.pulse::after {
   content: '';
   position: absolute;
   top: -2px;
@@ -433,7 +434,7 @@ button:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .order-badge::after,
+  .pulse::after,
   .success-halo::before,
   .route-polyline {
     animation: none !important;
