@@ -1,42 +1,88 @@
-// Application State
-let appState = {
-  dispatchState: 'idle', // idle, generating, dispatching, returning, completed, resetting
+const WAREHOUSE_COORDS = [25.0478, 121.5170];
+const ORDER_COUNT = 20;
+const ANIMATION_DURATION = 12000;
+const ROUTING_TIMEOUT = 10000;
+const MAX_ROUTING_ATTEMPTS = 3;
+const MAX_SNAP_DISTANCE = 250;
+const OSRM_BASE_URL = 'https://router.project-osrm.org';
+
+const CITY_LABELS = {
+  taipei: 'Taipei',
+  newTaipei: 'New Taipei',
+  keelung: 'Keelung'
+};
+
+const CITY_WEIGHTS = [
+  { city: 'taipei', weight: 0.40 },
+  { city: 'newTaipei', weight: 0.45 },
+  { city: 'keelung', weight: 0.15 }
+];
+
+// Urban demonstration boxes deliberately avoid broad mountain and sea areas.
+const CITY_ZONES = {
+  taipei: [
+    { minLat: 25.025, maxLat: 25.075, minLng: 121.500, maxLng: 121.580 },
+    { minLat: 25.075, maxLat: 25.125, minLng: 121.500, maxLng: 121.565 },
+    { minLat: 25.025, maxLat: 25.075, minLng: 121.565, maxLng: 121.625 }
+  ],
+  newTaipei: [
+    { minLat: 24.965, maxLat: 25.030, minLng: 121.410, maxLng: 121.480 },
+    { minLat: 25.025, maxLat: 25.100, minLng: 121.415, maxLng: 121.505 },
+    { minLat: 24.965, maxLat: 25.025, minLng: 121.485, maxLng: 121.555 },
+    { minLat: 25.055, maxLat: 25.085, minLng: 121.625, maxLng: 121.690 }
+  ],
+  keelung: [
+    { minLat: 25.118, maxLat: 25.142, minLng: 121.710, maxLng: 121.755 },
+    { minLat: 25.120, maxLat: 25.145, minLng: 121.755, maxLng: 121.790 }
+  ]
+};
+
+// Known urban road-side coordinates used only if the public routing service fails.
+const FALLBACK_ROAD_POINTS = {
+  taipei: [
+    [25.0339, 121.5645], [25.0418, 121.5516], [25.0520, 121.5438], [25.0629, 121.5265],
+    [25.0716, 121.5200], [25.0847, 121.5250], [25.0286, 121.5365], [25.0554, 121.6020]
+  ],
+  newTaipei: [
+    [25.0122, 121.4655], [25.0018, 121.4562], [25.0357, 121.4500], [25.0614, 121.4881],
+    [25.0804, 121.4808], [25.0084, 121.5152], [24.9826, 121.5415], [25.0682, 121.6620],
+    [25.0238, 121.4255]
+  ],
+  keelung: [
+    [25.1283, 121.7419], [25.1318, 121.7446], [25.1260, 121.7615]
+  ]
+};
+
+const SVG_WAREHOUSE = `<svg viewBox="0 0 24 24"><path d="M4 20h16v-8H4v8zm2-6h4v4H6v-4zm6 0h4v4h-4v-4zM2 9.5l10-7.5 10 7.5V21a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.5z"/></svg>`;
+const SVG_TRUCK = `<svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm12 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1-5.5h-3V9h3v4z"/></svg>`;
+const SVG_CHECK = `<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+
+const appState = {
+  dispatchState: 'idle',
   animationFrameId: null,
-  orders: [],            // List of generated orders
-  route: [],             // Planned route coordinate nodes
-  segmentDistances: [],  // Distance of each segment in meters
-  cumulativeDistances: [], // Cumulative distance along path in meters
-  totalRouteLength: 0,   // Total route length in meters
+  abortController: null,
+  runId: 0,
+  orders: [],
+  routePoints: [],
+  segmentDistances: [],
+  cumulativeDistances: [],
+  totalRouteLength: 0,
   completedCount: 0,
   truckMarker: null,
   warehouseMarker: null,
   routePolyline: null,
   routeCasingPolyline: null,
-  orderMarkers: [],      // Leaflet markers representing orders
-  timeouts: []           // Active timeout IDs for clearing on reset
+  orderMarkers: [],
+  timeouts: [],
+  isFallback: false
 };
 
-const WAREHOUSE_COORDS = [25.0478, 121.5170];
-
-// SVG Markup Templates
-const SVG_WAREHOUSE = `<svg viewBox="0 0 24 24"><path d="M4 20h16v-8H4v8zm2-6h4v4H6v-4zm6 0h4v4h-4v-4zM2 9.5l10-7.5 10 7.5V21a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.5z"/></svg>`;
-const SVG_TRUCK = `<svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm12 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1-5.5h-3V9h3v4z"/></svg>`;
-const SVG_CHECK = `<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: white;"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
-
-// Initialize Map
-const map = L.map('map', {
-  center: WAREHOUSE_COORDS,
-  zoom: 14,
-  zoomControl: true
-});
-
-// Use ESRI World Imagery tile layer
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', {
+const map = L.map('map', { center: WAREHOUSE_COORDS, zoom: 14, zoomControl: true });
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
   maxZoom: 18
 }).addTo(map);
 
-// Initialize Warehouse Marker
 const warehouseIcon = L.divIcon({
   className: 'custom-marker',
   html: `<div class="warehouse-badge">${SVG_WAREHOUSE}</div>`,
@@ -45,479 +91,439 @@ const warehouseIcon = L.divIcon({
 });
 appState.warehouseMarker = L.marker(WAREHOUSE_COORDS, { icon: warehouseIcon }).addTo(map);
 
-// Initialize Truck Marker (parked at warehouse)
 const truckIcon = L.divIcon({
   className: 'custom-marker',
   html: `<div class="marker-wrapper"><div class="truck-badge"><div class="truck-rotator" id="truck-rotator">${SVG_TRUCK}</div></div></div>`,
   iconSize: [32, 32],
   iconAnchor: [16, 16]
 });
-appState.truckMarker = L.marker(WAREHOUSE_COORDS, { icon: truckIcon }).addTo(map);
+appState.truckMarker = L.marker(WAREHOUSE_COORDS, { icon: truckIcon, zIndexOffset: 1000 }).addTo(map);
 
-// Helper: Geodesic Distance in meters using Haversine Formula
-function getDistance(coord1, coord2) {
-  const R = 6371000; // Earth radius in meters
-  const lat1 = coord1[0] * Math.PI / 180;
-  const lat2 = coord2[0] * Math.PI / 180;
-  const dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
-  const dLng = (coord2[1] - coord1[1]) * Math.PI / 180;
-
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1) * Math.cos(lat2) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+function getDistance(a, b) {
+  const radius = 6371000;
+  const lat1 = a[0] * Math.PI / 180;
+  const lat2 = b[0] * Math.PI / 180;
+  const dLat = (b[0] - a[0]) * Math.PI / 180;
+  const dLng = (b[1] - a[1]) * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return radius * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-// Generate 20 random order coordinates within ~1.5km of the warehouse with spacing constraints
-function generateOrders() {
-  const orders = [];
-  const maxRadiusDeg = 0.015; // ~1.5km
-  let minWarehouseDist = 300; // 300 meters
-  let minOrderDist = 150;     // 150 meters
-  
-  let attempts = 0;
-  const maxAttempts = 2000;
-  
-  while (orders.length < 20 && attempts < maxAttempts) {
-    attempts++;
-    
-    // Generate candidate around warehouse
-    const angle = Math.random() * Math.PI * 2;
-    const distDeg = (0.1 + Math.random() * 0.9) * maxRadiusDeg;
-    const lat = WAREHOUSE_COORDS[0] + distDeg * Math.sin(angle);
-    const lng = WAREHOUSE_COORDS[1] + distDeg * Math.cos(angle);
-    const coords = [lat, lng];
-    
-    // Check distance to warehouse
-    const distToWarehouse = getDistance(coords, WAREHOUSE_COORDS);
-    if (distToWarehouse < minWarehouseDist) {
-      if (attempts > 800) {
-        minWarehouseDist = Math.max(100, minWarehouseDist - 10);
-      }
-      continue;
-    }
-    
-    // Check distance to other existing orders
-    let tooClose = false;
-    for (const order of orders) {
-      const d = getDistance(coords, order.coords);
-      if (d < minOrderDist) {
-        tooClose = true;
-        break;
-      }
-    }
-    
-    if (tooClose) {
-      if (attempts > 800) {
-        minOrderDist = Math.max(50, minOrderDist - 5);
-      }
-      continue;
-    }
-    
-    const id = String(orders.length + 1).padStart(2, '0');
-    orders.push({
-      id: `#${id}`,
-      coords: coords,
-      completed: false,
-      cumulativeDistance: 0
-    });
+function chooseWeightedCity() {
+  const roll = Math.random();
+  let cumulative = 0;
+  for (const entry of CITY_WEIGHTS) {
+    cumulative += entry.weight;
+    if (roll <= cumulative) return entry.city;
   }
-  
-  // Fallback: fill remaining if retry limit reached
-  while (orders.length < 20) {
-    const angle = Math.random() * Math.PI * 2;
-    const distDeg = (0.2 + Math.random() * 0.8) * maxRadiusDeg;
-    const lat = WAREHOUSE_COORDS[0] + distDeg * Math.sin(angle);
-    const lng = WAREHOUSE_COORDS[1] + distDeg * Math.cos(angle);
-    const id = String(orders.length + 1).padStart(2, '0');
-    orders.push({
-      id: `#${id}`,
-      coords: [lat, lng],
-      completed: false,
-      cumulativeDistance: 0
-    });
-  }
-  
-  return orders;
+  return 'keelung';
 }
 
-// Solve Nearest Neighbor path
+function createCityAssignments() {
+  const assignments = ['taipei', 'newTaipei', 'keelung'];
+  while (assignments.length < ORDER_COUNT) assignments.push(chooseWeightedCity());
+  return assignments.sort(() => Math.random() - 0.5);
+}
+
+function randomPointInCity(city) {
+  const zones = CITY_ZONES[city];
+  const zone = zones[Math.floor(Math.random() * zones.length)];
+  return [
+    zone.minLat + Math.random() * (zone.maxLat - zone.minLat),
+    zone.minLng + Math.random() * (zone.maxLng - zone.minLng)
+  ];
+}
+
+function generateCandidates() {
+  return createCityAssignments().map((city, index) => ({
+    sourceIndex: index + 1,
+    city,
+    coords: randomPointInCity(city),
+    completed: false
+  }));
+}
+
+function buildOsrmUrl(candidates) {
+  const coordinates = [WAREHOUSE_COORDS, ...candidates.map(order => order.coords)]
+    .map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`)
+    .join(';');
+  const query = new URLSearchParams({
+    roundtrip: 'true',
+    source: 'first',
+    steps: 'true',
+    geometries: 'geojson',
+    overview: 'full'
+  });
+  return `${OSRM_BASE_URL}/trip/v1/driving/${coordinates}?${query}`;
+}
+
+async function fetchRoadRoute(candidates, signal) {
+  const response = await fetch(buildOsrmUrl(candidates), { signal });
+  if (!response.ok) throw new Error(`OSRM HTTP ${response.status}`);
+  const data = await response.json();
+  if (data.code !== 'Ok' || !data.trips?.[0] || data.waypoints?.length !== ORDER_COUNT + 1) {
+    throw new Error(data.message || data.code || 'Incomplete OSRM response');
+  }
+  if (data.waypoints.some((waypoint, index) => index > 0 && waypoint.distance > MAX_SNAP_DISTANCE)) {
+    const error = new Error('One or more orders are too far from the road network');
+    error.retryableSnap = true;
+    throw error;
+  }
+
+  const trip = data.trips[0];
+  if (!trip.legs || trip.legs.length !== ORDER_COUNT + 1) throw new Error('Incomplete route legs');
+
+  const orders = candidates.map((candidate, index) => {
+    const waypoint = data.waypoints[index + 1];
+    return {
+      ...candidate,
+      coords: [waypoint.location[1], waypoint.location[0]],
+      roadName: waypoint.name || 'Unnamed road',
+      visitIndex: waypoint.waypoint_index
+    };
+  }).sort((a, b) => a.visitIndex - b.visitIndex);
+
+  orders.forEach((order, index) => { order.id = `#${String(index + 1).padStart(2, '0')}`; });
+  const { routePoints, orderThresholds } = buildRoadGeometry(trip.legs);
+  if (routePoints.length < 2 || orderThresholds.length !== ORDER_COUNT) {
+    throw new Error('Incomplete road geometry');
+  }
+  orders.forEach((order, index) => { order.cumulativeDistance = orderThresholds[index]; });
+
+  return {
+    orders,
+    routePoints,
+    distance: trip.distance,
+    duration: trip.duration,
+    isFallback: false
+  };
+}
+
+function appendCoordinates(target, geoJsonCoordinates) {
+  for (const [lng, lat] of geoJsonCoordinates || []) {
+    const point = [lat, lng];
+    const last = target[target.length - 1];
+    if (!last || getDistance(last, point) > 0.05) target.push(point);
+  }
+}
+
+function buildRoadGeometry(legs) {
+  const routePoints = [];
+  const orderThresholds = [];
+  let cumulative = 0;
+
+  legs.forEach((leg, legIndex) => {
+    const legPoints = [];
+    for (const step of leg.steps || []) appendCoordinates(legPoints, step.geometry?.coordinates);
+    if (legPoints.length === 0) throw new Error('A route leg has no road geometry');
+
+    for (const point of legPoints) {
+      const last = routePoints[routePoints.length - 1];
+      if (!last) {
+        routePoints.push(point);
+      } else if (getDistance(last, point) > 0.05) {
+        cumulative += getDistance(last, point);
+        routePoints.push(point);
+      }
+    }
+    if (legIndex < ORDER_COUNT) orderThresholds.push(cumulative);
+  });
+
+  return { routePoints, orderThresholds };
+}
+
+function shuffled(items) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function buildFallbackRoute() {
+  const orders = [
+    ...shuffled(FALLBACK_ROAD_POINTS.taipei).map(coords => ({ city: 'taipei', coords })),
+    ...shuffled(FALLBACK_ROAD_POINTS.newTaipei).map(coords => ({ city: 'newTaipei', coords })),
+    ...shuffled(FALLBACK_ROAD_POINTS.keelung).map(coords => ({ city: 'keelung', coords }))
+  ].map(order => ({ ...order, completed: false }));
+
+  const sorted = solveNearestNeighbor(orders);
+  sorted.forEach((order, index) => { order.id = `#${String(index + 1).padStart(2, '0')}`; });
+  const routePoints = [WAREHOUSE_COORDS, ...sorted.map(order => order.coords), WAREHOUSE_COORDS];
+  let cumulative = 0;
+  for (let index = 1; index < routePoints.length; index += 1) {
+    cumulative += getDistance(routePoints[index - 1], routePoints[index]);
+    if (index <= ORDER_COUNT) sorted[index - 1].cumulativeDistance = cumulative;
+  }
+  return { orders: sorted, routePoints, distance: cumulative, duration: null, isFallback: true };
+}
+
 function solveNearestNeighbor(orders) {
   const unvisited = [...orders];
-  const path = [];
-  let currentPos = WAREHOUSE_COORDS;
-
-  while (unvisited.length > 0) {
+  const result = [];
+  let current = WAREHOUSE_COORDS;
+  while (unvisited.length) {
     let nearestIndex = 0;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < unvisited.length; i++) {
-      const d = getDistance(currentPos, unvisited[i].coords);
-      if (d < minDistance) {
-        minDistance = d;
-        nearestIndex = i;
+    for (let index = 1; index < unvisited.length; index += 1) {
+      if (getDistance(current, unvisited[index].coords) < getDistance(current, unvisited[nearestIndex].coords)) {
+        nearestIndex = index;
       }
     }
-
-    const nextNode = unvisited.splice(nearestIndex, 1)[0];
-    path.push(nextNode);
-    currentPos = nextNode.coords;
+    const [next] = unvisited.splice(nearestIndex, 1);
+    result.push(next);
+    current = next.coords;
   }
-
-  return path;
+  return result;
 }
 
-// UI Announcer for screen readers
-function announceState(message) {
+function preparePathMetrics(routePoints) {
+  appState.segmentDistances = [];
+  appState.cumulativeDistances = [0];
+  let total = 0;
+  for (let index = 0; index < routePoints.length - 1; index += 1) {
+    const distance = getDistance(routePoints[index], routePoints[index + 1]);
+    appState.segmentDistances.push(distance);
+    total += distance;
+    appState.cumulativeDistances.push(total);
+  }
+  appState.totalRouteLength = total;
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds)) return 'estimated time unavailable';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.max(1, Math.round((seconds % 3600) / 60));
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+function updateRouteSummary(routeData) {
+  const counts = { taipei: 0, newTaipei: 0, keelung: 0 };
+  routeData.orders.forEach(order => { counts[order.city] += 1; });
+  document.getElementById('city-distribution').textContent =
+    `Taipei ${counts.taipei} · New Taipei ${counts.newTaipei} · Keelung ${counts.keelung}`;
+  document.getElementById('route-summary').textContent = routeData.isFallback
+    ? `${(routeData.distance / 1000).toFixed(1)} km · straight-line fallback`
+    : `${(routeData.distance / 1000).toFixed(1)} km · ${formatDuration(routeData.duration)}`;
+  document.getElementById('route-warning').classList.toggle('hidden', !routeData.isFallback);
+}
+
+function renderOrders(orders) {
+  const bounds = L.latLngBounds([WAREHOUSE_COORDS]);
+  orders.forEach((order, index) => {
+    bounds.extend(order.coords);
+    const markerHtml = `<div class="marker-wrapper" id="order-wrapper-${index}"><div class="order-badge pulse" id="order-badge-${index}">${order.id}</div></div>`;
+    const icon = L.divIcon({ className: 'custom-marker', html: markerHtml, iconSize: [30, 30], iconAnchor: [15, 15] });
+    const marker = L.marker(order.coords, { icon, title: `${order.id} · ${CITY_LABELS[order.city]}` }).addTo(map);
+    appState.orderMarkers.push(marker);
+  });
+  map.fitBounds(bounds, { padding: [50, 50], animate: false });
+  appState.routeCasingPolyline = L.polyline([WAREHOUSE_COORDS], { color: '#fff', weight: 7, opacity: 0.9 }).addTo(map);
+  appState.routePolyline = L.polyline([WAREHOUSE_COORDS], { color: '#00e5ff', weight: 4, opacity: 1, className: 'route-polyline' }).addTo(map);
+}
+
+function announceState(message, visible = false) {
   const toast = document.getElementById('toast-banner');
   toast.textContent = message;
-  toast.setAttribute('aria-live', 'polite');
+  toast.classList.toggle('hidden', !visible);
 }
 
-// Clear Map Objects & Panel Details
-function resetState() {
-  if (appState.animationFrameId !== null) {
-    cancelAnimationFrame(appState.animationFrameId);
-    appState.animationFrameId = null;
-  }
-
-  // Clear all pending timeouts
-  if (appState.timeouts) {
-    appState.timeouts.forEach(t => clearTimeout(t));
-    appState.timeouts = [];
-  }
-
-  // Reset markers
-  appState.orderMarkers.forEach(m => map.removeLayer(m));
+function clearRunState() {
+  appState.runId += 1;
+  appState.abortController?.abort();
+  appState.abortController = null;
+  if (appState.animationFrameId !== null) cancelAnimationFrame(appState.animationFrameId);
+  appState.animationFrameId = null;
+  appState.timeouts.forEach(clearTimeout);
+  appState.timeouts = [];
+  appState.orderMarkers.forEach(marker => map.removeLayer(marker));
   appState.orderMarkers = [];
-  
-  if (appState.routePolyline) {
-    map.removeLayer(appState.routePolyline);
-    appState.routePolyline = null;
-  }
-  if (appState.routeCasingPolyline) {
-    map.removeLayer(appState.routeCasingPolyline);
-    appState.routeCasingPolyline = null;
-  }
-
-  // Park truck
-  if (appState.truckMarker) {
-    appState.truckMarker.setLatLng(WAREHOUSE_COORDS);
-    const truckElement = document.getElementById('truck-rotator');
-    if (truckElement) {
-      truckElement.style.transform = 'rotate(0deg)';
-    }
-  }
-
-  // Reset variables
+  if (appState.routePolyline) map.removeLayer(appState.routePolyline);
+  if (appState.routeCasingPolyline) map.removeLayer(appState.routeCasingPolyline);
+  appState.routePolyline = null;
+  appState.routeCasingPolyline = null;
   appState.orders = [];
-  appState.route = [];
-  appState.segmentDistances = [];
-  appState.cumulativeDistances = [];
-  appState.totalRouteLength = 0;
+  appState.routePoints = [];
   appState.completedCount = 0;
-  appState.dispatchState = 'idle';
-
-  // Reset Panel
+  appState.isFallback = false;
+  appState.truckMarker.setLatLng(WAREHOUSE_COORDS);
+  const rotator = document.getElementById('truck-rotator');
+  if (rotator) rotator.style.transform = 'rotate(0deg)';
   document.getElementById('total-orders').textContent = '0';
   document.getElementById('completed-deliveries').textContent = '0';
   document.getElementById('progress-percentage').textContent = '0%';
   document.getElementById('progress-bar').style.width = '0%';
   document.getElementById('active-order').textContent = '-';
-  
-  const statusVal = document.getElementById('vehicle-status');
-  statusVal.textContent = 'IDLE';
-  statusVal.className = 'status-value idle';
-
-  const toast = document.getElementById('toast-banner');
-  toast.classList.add('hidden');
-
-  const dispatchBtn = document.getElementById('dispatch-btn');
-  dispatchBtn.textContent = 'Dispatch Orders';
-  dispatchBtn.setAttribute('aria-label', 'Dispatch Orders');
-  dispatchBtn.disabled = false;
+  document.getElementById('city-distribution').textContent = 'Taipei 0 · New Taipei 0 · Keelung 0';
+  document.getElementById('route-summary').textContent = '-';
+  document.getElementById('route-warning').classList.add('hidden');
+  announceState('', false);
 }
 
-// Set up button triggers
-document.getElementById('dispatch-btn').addEventListener('click', () => {
-  if (appState.dispatchState !== 'idle' && appState.dispatchState !== 'completed') return;
-
-  // Reset if we are running again
-  resetState();
-  
-  appState.dispatchState = 'generating';
-  const dispatchBtn = document.getElementById('dispatch-btn');
-  dispatchBtn.disabled = true;
-  dispatchBtn.setAttribute('aria-label', 'Dispatching Orders');
-  
-  const vehicleStatus = document.getElementById('vehicle-status');
-  vehicleStatus.textContent = 'PREPARING';
-  vehicleStatus.className = 'status-value dispatching';
-
-  // 1. Generate Orders
-  appState.orders = generateOrders();
-  document.getElementById('total-orders').textContent = appState.orders.length;
-
-  // 2. Solve Nearest Neighbor Path
-  const sortedRoute = solveNearestNeighbor(appState.orders);
-
-  // Re-synchronize the id field of the sorted orders to match their sequential visit index
-  sortedRoute.forEach((order, index) => {
-    order.id = `#${String(index + 1).padStart(2, '0')}`;
-  });
-
-  // 3. Construct Complete Node List: Warehouse -> Orders... -> Warehouse
-  appState.route = [
-    { id: 'Warehouse', coords: WAREHOUSE_COORDS },
-    ...sortedRoute,
-    { id: 'Warehouse', coords: WAREHOUSE_COORDS }
-  ];
-
-  // 4. Calculate Distance Matrix
-  appState.segmentDistances = [];
-  appState.cumulativeDistances = [0];
-  let totalLength = 0;
-
-  for (let i = 0; i < appState.route.length - 1; i++) {
-    const dist = getDistance(appState.route[i].coords, appState.route[i+1].coords);
-    appState.segmentDistances.push(dist);
-    totalLength += dist;
-    appState.cumulativeDistances.push(totalLength);
+async function planDispatchRoute(signal) {
+  let lastError;
+  for (let attempt = 0; attempt < MAX_ROUTING_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchRoadRoute(generateCandidates(), signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      lastError = error;
+      if (!error.retryableSnap) break;
+    }
   }
-  appState.totalRouteLength = totalLength;
+  console.warn('Live road routing unavailable; using simulation route.', lastError);
+  return buildFallbackRoute();
+}
 
-  // Match order indices to cumulative distance traveled to hit them
-  for (let i = 0; i < sortedRoute.length; i++) {
-    // index in sortedRoute matches (i+1) index in appState.route
-    sortedRoute[i].cumulativeDistance = appState.cumulativeDistances[i + 1];
+document.getElementById('dispatch-btn').addEventListener('click', async () => {
+  if (!['idle', 'completed'].includes(appState.dispatchState)) return;
+  clearRunState();
+  const currentRunId = appState.runId;
+  appState.dispatchState = 'routing';
+  const button = document.getElementById('dispatch-btn');
+  const status = document.getElementById('vehicle-status');
+  button.disabled = true;
+  button.setAttribute('aria-label', 'Planning delivery route');
+  status.textContent = 'PLANNING ROUTE';
+  status.className = 'status-value dispatching';
+  announceState('Planning a road-network delivery route.');
+
+  const controller = new AbortController();
+  appState.abortController = controller;
+  const timeoutId = setTimeout(() => controller.abort(), ROUTING_TIMEOUT);
+  appState.timeouts.push(timeoutId);
+
+  let routeData;
+  try {
+    routeData = await planDispatchRoute(controller.signal);
+  } catch (error) {
+    if (currentRunId !== appState.runId) return;
+    routeData = buildFallbackRoute();
+    console.warn('Routing request timed out; using simulation route.', error);
+  } finally {
+    clearTimeout(timeoutId);
+    appState.timeouts = appState.timeouts.filter(id => id !== timeoutId);
+    if (appState.abortController === controller) appState.abortController = null;
   }
 
-  // 5. Draw Pending Order Markers on Map
-  const bounds = L.latLngBounds([WAREHOUSE_COORDS]);
-  
-  sortedRoute.forEach((order, index) => {
-    bounds.extend(order.coords);
-    const markerHtml = `
-      <div class="marker-wrapper" id="order-wrapper-${index}">
-        <div class="order-badge pulse" id="order-badge-${index}">
-          #${String(index + 1).padStart(2, '0')}
-        </div>
-      </div>
-    `;
-    const orderIcon = L.divIcon({
-      className: 'custom-marker',
-      html: markerHtml,
-      iconSize: [30, 30],
-      iconAnchor: [15, 15]
-    });
-
-    const m = L.marker(order.coords, { icon: orderIcon }).addTo(map);
-    appState.orderMarkers.push(m);
-  });
-
-  // Fit View to show all coordinates
-  map.fitBounds(bounds, { padding: [50, 50] });
-
-  // Initialize progressive route lines
-  appState.routeCasingPolyline = L.polyline([WAREHOUSE_COORDS], {
-    color: '#ffffff',
-    weight: 7,
-    opacity: 0.9,
-    className: 'route-casing-polyline'
-  }).addTo(map);
-
-  appState.routePolyline = L.polyline([WAREHOUSE_COORDS], {
-    color: '#00e5ff', // Bright cyan for high-contrast visibility on satellite tiles
-    weight: 4,
-    opacity: 1,
-    className: 'route-polyline'
-  }).addTo(map);
-
-  // 6. Start simulation loop after map view has adjusted
-  const startTimeout = setTimeout(() => {
-    startDispatchSimulation();
-  }, 800);
+  if (currentRunId !== appState.runId) return;
+  appState.orders = routeData.orders;
+  appState.routePoints = routeData.routePoints;
+  appState.isFallback = routeData.isFallback;
+  preparePathMetrics(routeData.routePoints);
+  document.getElementById('total-orders').textContent = ORDER_COUNT;
+  updateRouteSummary(routeData);
+  renderOrders(routeData.orders);
+  const startTimeout = setTimeout(() => startDispatchSimulation(currentRunId), 500);
   appState.timeouts.push(startTimeout);
 });
 
-function startDispatchSimulation() {
+function startDispatchSimulation(runId) {
+  if (runId !== appState.runId) return;
   appState.dispatchState = 'dispatching';
-  
-  const vehicleStatus = document.getElementById('vehicle-status');
-  vehicleStatus.textContent = 'DISPATCHING';
-  vehicleStatus.className = 'status-value dispatching';
-
-  const duration = 5000; // Animation duration in milliseconds
+  const status = document.getElementById('vehicle-status');
+  status.textContent = appState.isFallback ? 'SIMULATING' : 'DISPATCHING';
+  status.className = 'status-value dispatching';
   let startTime = null;
-  let nextOrderIndex = 0; // Index in the sorted route list
+  let nextOrderIndex = 0;
 
-  // Extract sorted orders for distance matching
-  const sortedOrders = appState.route.slice(1, appState.route.length - 1);
+  function completeOrder(index) {
+    const order = appState.orders[index];
+    if (!order || order.completed) return;
+    order.completed = true;
+    const badge = document.getElementById(`order-badge-${index}`);
+    const wrapper = document.getElementById(`order-wrapper-${index}`);
+    if (badge) {
+      badge.classList.add('order-badge-completed');
+      badge.innerHTML = SVG_CHECK;
+    }
+    if (wrapper) {
+      wrapper.classList.add('success-halo');
+      const timeout = setTimeout(() => wrapper.classList.remove('success-halo'), 600);
+      appState.timeouts.push(timeout);
+    }
+    appState.completedCount += 1;
+    document.getElementById('completed-deliveries').textContent = appState.completedCount;
+    announceState(`${order.id} delivered in ${CITY_LABELS[order.city]}.`);
+  }
+
+  function finish() {
+    appState.animationFrameId = null;
+    appState.dispatchState = 'completed';
+    status.textContent = 'COMPLETED';
+    status.className = 'status-value completed';
+    document.getElementById('active-order').textContent = 'Warehouse';
+    document.getElementById('progress-percentage').textContent = '100%';
+    document.getElementById('progress-bar').style.width = '100%';
+    appState.truckMarker.setLatLng(WAREHOUSE_COORDS);
+    const rotator = document.getElementById('truck-rotator');
+    if (rotator) rotator.style.transform = 'rotate(0deg)';
+    announceState('All deliveries completed', true);
+    const button = document.getElementById('dispatch-btn');
+    button.textContent = 'Dispatch Again';
+    button.setAttribute('aria-label', 'Dispatch Again');
+    button.disabled = false;
+  }
 
   function animationStep(timestamp) {
-    if (!startTime) startTime = timestamp;
-    const elapsed = timestamp - startTime;
-    const progressRatio = Math.min(elapsed / duration, 1);
-    const currentDistance = progressRatio * appState.totalRouteLength;
-
-    // 1. Locate current coordinate segment
-    let segmentIndex = 0;
-    for (let i = 0; i < appState.segmentDistances.length; i++) {
-      if (currentDistance <= appState.cumulativeDistances[i + 1]) {
-        segmentIndex = i;
+    if (runId !== appState.runId) return;
+    if (startTime === null) startTime = timestamp;
+    const ratio = Math.min((timestamp - startTime) / ANIMATION_DURATION, 1);
+    const traveled = ratio * appState.totalRouteLength;
+    let segmentIndex = appState.segmentDistances.length - 1;
+    for (let index = 0; index < appState.segmentDistances.length; index += 1) {
+      if (traveled <= appState.cumulativeDistances[index + 1]) {
+        segmentIndex = index;
         break;
       }
-      segmentIndex = i;
     }
 
-    // 2. Interpolate position within segment
-    const segStartDist = appState.cumulativeDistances[segmentIndex];
-    const segEndDist = appState.cumulativeDistances[segmentIndex + 1];
-    const segLength = appState.segmentDistances[segmentIndex];
-    
-    let segRatio = 0;
-    if (segLength > 0) {
-      segRatio = (currentDistance - segStartDist) / segLength;
-    }
-    segRatio = Math.max(0, Math.min(1, segRatio));
+    const segmentStart = appState.cumulativeDistances[segmentIndex];
+    const segmentLength = appState.segmentDistances[segmentIndex] || 1;
+    const segmentRatio = Math.max(0, Math.min(1, (traveled - segmentStart) / segmentLength));
+    const from = appState.routePoints[segmentIndex];
+    const to = appState.routePoints[segmentIndex + 1];
+    const current = [
+      from[0] + (to[0] - from[0]) * segmentRatio,
+      from[1] + (to[1] - from[1]) * segmentRatio
+    ];
+    appState.truckMarker.setLatLng(current);
 
-    const fromNode = appState.route[segmentIndex].coords;
-    const toNode = appState.route[segmentIndex + 1].coords;
+    const fromPoint = map.latLngToLayerPoint(from);
+    const toPoint = map.latLngToLayerPoint(to);
+    const angle = Math.atan2(toPoint.y - fromPoint.y, toPoint.x - fromPoint.x) * 180 / Math.PI;
+    const rotator = document.getElementById('truck-rotator');
+    if (rotator) rotator.style.transform = `rotate(${angle}deg)`;
 
-    const lat = fromNode[0] + (toNode[0] - fromNode[0]) * segRatio;
-    const lng = fromNode[1] + (toNode[1] - fromNode[1]) * segRatio;
-    const currentLatLng = L.latLng(lat, lng);
+    const traversed = appState.routePoints.slice(0, segmentIndex + 1);
+    traversed.push(current);
+    appState.routeCasingPolyline.setLatLngs(traversed);
+    appState.routePolyline.setLatLngs(traversed);
 
-    // Update Truck Coordinate
-    appState.truckMarker.setLatLng(currentLatLng);
-
-    // Update active order label in the panel
-    if (segmentIndex < appState.route.length - 2) {
-      document.getElementById('active-order').textContent = appState.route[segmentIndex + 1].id;
-    } else {
-      document.getElementById('active-order').textContent = 'Warehouse';
-      if (appState.dispatchState !== 'returning') {
-        appState.dispatchState = 'returning';
-        vehicleStatus.textContent = 'RETURNING';
-        vehicleStatus.className = 'status-value returning';
-      }
-    }
-
-    // Update general progress bar
-    const progressPct = Math.round(progressRatio * 100);
-    document.getElementById('progress-percentage').textContent = `${progressPct}%`;
-    document.getElementById('progress-bar').style.width = `${progressPct}%`;
-
-    // 3. Compute screen space truck rotation
-    const fromPoint = map.latLngToLayerPoint(L.latLng(fromNode));
-    const toPoint = map.latLngToLayerPoint(L.latLng(toNode));
-    const rotationAngle = Math.atan2(
-      toPoint.y - fromPoint.y,
-      toPoint.x - fromPoint.x
-    ) * 180 / Math.PI;
-
-    const truckRotator = document.getElementById('truck-rotator');
-    if (truckRotator) {
-      // SVG icon default orientation is facing right, so no offset is needed.
-      // We override only the inner rotator wrapper styles
-      truckRotator.style.transform = `rotate(${rotationAngle}deg)`;
-    }
-
-    // 4. Update Progressive Polyline (traversed nodes + active position)
-    const traversedCoords = appState.route.slice(0, segmentIndex + 1).map(n => n.coords);
-    traversedCoords.push([lat, lng]);
-    appState.routeCasingPolyline.setLatLngs(traversedCoords);
-    appState.routePolyline.setLatLngs(traversedCoords);
-
-    // 5. Update completed markers (using loop to handle skipped frames)
-    while (
-      nextOrderIndex < sortedOrders.length &&
-      currentDistance >= sortedOrders[nextOrderIndex].cumulativeDistance
-    ) {
+    while (nextOrderIndex < appState.orders.length && traveled >= appState.orders[nextOrderIndex].cumulativeDistance) {
       completeOrder(nextOrderIndex);
       nextOrderIndex += 1;
     }
 
-    // 6. Continue loop or finalize
-    if (progressRatio < 1) {
+    const nextOrder = appState.orders[nextOrderIndex];
+    document.getElementById('active-order').textContent = nextOrder ? `${nextOrder.id} · ${CITY_LABELS[nextOrder.city]}` : 'Warehouse';
+    if (!nextOrder && appState.dispatchState !== 'returning') {
+      appState.dispatchState = 'returning';
+      status.textContent = 'RETURNING';
+      status.className = 'status-value returning';
+    }
+    const percentage = Math.round(ratio * 100);
+    document.getElementById('progress-percentage').textContent = `${percentage}%`;
+    document.getElementById('progress-bar').style.width = `${percentage}%`;
+
+    if (ratio < 1) {
       appState.animationFrameId = requestAnimationFrame(animationStep);
     } else {
-      // Complete remaining orders if frame skipped
-      while (nextOrderIndex < sortedOrders.length) {
-        completeOrder(nextOrderIndex);
-        nextOrderIndex += 1;
-      }
-      finalizeSimulation();
+      while (nextOrderIndex < appState.orders.length) completeOrder(nextOrderIndex++);
+      finish();
     }
-  }
-
-  // Function to set marker completed state (green + checkmark SVG)
-  function completeOrder(index) {
-    const order = sortedOrders[index];
-    if (order && !order.completed) {
-      order.completed = true;
-
-      const badge = document.getElementById(`order-badge-${index}`);
-      const wrapper = document.getElementById(`order-wrapper-${index}`);
-      
-      if (badge) {
-        badge.classList.add('order-badge-completed');
-        badge.innerHTML = SVG_CHECK;
-      }
-      
-      if (wrapper) {
-        wrapper.classList.add('success-halo');
-        // Remove halo animation class after completion to save GPU
-        const tId = setTimeout(() => {
-          wrapper.classList.remove('success-halo');
-        }, 600);
-        appState.timeouts.push(tId);
-      }
-
-      appState.completedCount += 1;
-      document.getElementById('completed-deliveries').textContent = appState.completedCount;
-      announceState(`Order #${String(index + 1).padStart(2, '0')} delivered.`);
-    }
-  }
-
-  // Triggered at 100% traversal
-  function finalizeSimulation() {
-    appState.animationFrameId = null;
-    appState.dispatchState = 'completed';
-    
-    const vehicleStatus = document.getElementById('vehicle-status');
-    vehicleStatus.textContent = 'COMPLETED';
-    vehicleStatus.className = 'status-value completed';
-
-    document.getElementById('active-order').textContent = 'Warehouse';
-    
-    // Rotate truck back to default
-    const truckRotator = document.getElementById('truck-rotator');
-    if (truckRotator) {
-      truckRotator.style.transform = 'rotate(0deg)';
-    }
-
-    // Show completion toast
-    const toast = document.getElementById('toast-banner');
-    toast.classList.remove('hidden');
-    announceState("All deliveries completed");
-
-    // Enable Re-Dispatch Button
-    const dispatchBtn = document.getElementById('dispatch-btn');
-    dispatchBtn.textContent = 'Dispatch Again';
-    dispatchBtn.setAttribute('aria-label', 'Dispatch Again');
-    dispatchBtn.disabled = false;
   }
 
   appState.animationFrameId = requestAnimationFrame(animationStep);
 }
 
-// Handle window resizing to invalidate map size
 let resizeTimeout;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(() => {
-    map.invalidateSize();
-  }, 100);
+  resizeTimeout = setTimeout(() => map.invalidateSize(), 100);
 });

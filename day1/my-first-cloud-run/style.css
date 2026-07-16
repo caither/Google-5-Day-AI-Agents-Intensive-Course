@@ -237,6 +237,35 @@ body {
   color: var(--accent-green);
 }
 
+.status-item-stacked {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.status-detail {
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.route-warning {
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid var(--accent-orange);
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+}
+
+.route-warning.hidden {
+  display: none;
+}
+
 .toast-banner {
   background-color: rgba(16, 185, 129, 0.15);
   border: 1px solid var(--accent-green);
