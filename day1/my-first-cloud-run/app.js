@@ -11,6 +11,7 @@ let appState = {
   truckMarker: null,
   warehouseMarker: null,
   routePolyline: null,
+  routeCasingPolyline: null,
   orderMarkers: [],      // Leaflet markers representing orders
   timeouts: []           // Active timeout IDs for clearing on reset
 };
@@ -195,6 +196,10 @@ function resetState() {
     map.removeLayer(appState.routePolyline);
     appState.routePolyline = null;
   }
+  if (appState.routeCasingPolyline) {
+    map.removeLayer(appState.routeCasingPolyline);
+    appState.routeCasingPolyline = null;
+  }
 
   // Park truck
   if (appState.truckMarker) {
@@ -314,11 +319,18 @@ document.getElementById('dispatch-btn').addEventListener('click', () => {
   // Fit View to show all coordinates
   map.fitBounds(bounds, { padding: [50, 50] });
 
-  // Initialize progressive route line
+  // Initialize progressive route lines
+  appState.routeCasingPolyline = L.polyline([WAREHOUSE_COORDS], {
+    color: '#ffffff',
+    weight: 7,
+    opacity: 0.9,
+    className: 'route-casing-polyline'
+  }).addTo(map);
+
   appState.routePolyline = L.polyline([WAREHOUSE_COORDS], {
-    color: '#3b82f6',
+    color: '#2563eb',
     weight: 4,
-    opacity: 0.8,
+    opacity: 1,
     className: 'route-polyline'
   }).addTo(map);
 
@@ -415,6 +427,7 @@ function startDispatchSimulation() {
     // 4. Update Progressive Polyline (traversed nodes + active position)
     const traversedCoords = appState.route.slice(0, segmentIndex + 1).map(n => n.coords);
     traversedCoords.push([lat, lng]);
+    appState.routeCasingPolyline.setLatLngs(traversedCoords);
     appState.routePolyline.setLatLngs(traversedCoords);
 
     // 5. Update completed markers (using loop to handle skipped frames)
