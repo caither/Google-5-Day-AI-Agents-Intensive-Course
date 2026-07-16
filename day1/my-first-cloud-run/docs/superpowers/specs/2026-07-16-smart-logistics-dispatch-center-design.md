@@ -8,7 +8,7 @@
 
 ## 1. Project Goal
 
-Create a professional, dark-themed, single-page logistics control center frontend application. The application will showcase a Leaflet map where a delivery truck dispatches from a warehouse, visits exactly 20 randomly generated orders using a Nearest Neighbor heuristic, and returns to the warehouse.
+Create a professional, light-themed minimalist, single-page logistics control center frontend application. The application will showcase a Leaflet map where a delivery truck dispatches from a warehouse, visits exactly 20 randomly generated orders using a Nearest Neighbor heuristic, and returns to the warehouse.
 
 The truck movement, progressive route drawing, order state changes, and dashboard updates must remain synchronized. The movement animation should complete in approximately 5 seconds under normal foreground-tab conditions. Success halos may overlap and remain visible briefly after their corresponding deliveries.
 
@@ -28,11 +28,11 @@ No backend, database, build step, or routing API is required.
 
 ## 3. UI/UX and Visual Guidelines
 
-- **Theme**: High-tech Logistics Dashboard (Dark Mode).
-  - Background: Deep Obsidian Blue (`#0a0f1d`).
-  - Panels: Translucent slate-blue glassmorphism (`rgba(16, 24, 48, 0.8)` with `backdrop-filter: blur(10px)`).
-  - Primary Accent: Neon Green (`#10b981`) for success and progress.
-  - Pending Accent: Warning Orange/Red (`#f59e0b` / `#ef4444`) for pending and active orders.
+- **Theme**: Light Minimalism (Clean Minimalist Slate).
+  - Background: Crisp Light Slate (`#f8fafc`).
+  - Panels: Clean white overlays (`rgba(255, 255, 255, 0.95)` with a clean border and soft shadow).
+  - Primary Accent: Royal Blue (`#2563eb`).
+  - Pending Accent: High-visibility Orange (`#f97316`).
 - **Header**: Display "Smart Logistics Dispatch Center" and a prominent dynamic `Dispatch Orders` button.
 - **Dashboard**: Show total orders, completed deliveries, current order, progress percentage and bar, and truck status.
 - **Desktop Layout**: Two-column grid with the map at approximately 70% width and the statistics panel at 30% width.
@@ -42,7 +42,7 @@ No backend, database, build step, or routing API is required.
 
 ### Leaflet Tile Layer
 
-- Use a publicly accessible dark raster tile layer that does not require an API key, such as a suitable CARTO/OSM-based layer.
+- Use ESRI World Imagery raster tile layer.
 - Preserve all required Leaflet and map-data attribution; attribution must remain visible on every viewport size.
 - A tile-loading failure must not prevent the simulated dispatch, dashboard, or reset controls from operating.
 - Do not embed API keys or secrets in the frontend.
