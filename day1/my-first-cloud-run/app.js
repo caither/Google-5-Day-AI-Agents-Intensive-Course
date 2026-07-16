@@ -11,7 +11,8 @@ let appState = {
   truckMarker: null,
   warehouseMarker: null,
   routePolyline: null,
-  orderMarkers: []       // Leaflet markers representing orders
+  orderMarkers: [],      // Leaflet markers representing orders
+  timeouts: []           // Active timeout IDs for clearing on reset
 };
 
 const WAREHOUSE_COORDS = [25.0478, 121.5170];
@@ -67,24 +68,76 @@ function getDistance(coord1, coord2) {
   return R * c;
 }
 
-// Generate 20 random order coordinates within ~1.5km of the warehouse
+// Generate 20 random order coordinates within ~1.5km of the warehouse with spacing constraints
 function generateOrders() {
   const orders = [];
-  const radius = 0.015; // Roughly 1.5km in degrees lat/lng
-  for (let i = 1; i <= 20; i++) {
-    // Avoid clustered points, distribute using simple polar translation
+  const maxRadiusDeg = 0.015; // ~1.5km
+  let minWarehouseDist = 300; // 300 meters
+  let minOrderDist = 150;     // 150 meters
+  
+  let attempts = 0;
+  const maxAttempts = 2000;
+  
+  while (orders.length < 20 && attempts < maxAttempts) {
+    attempts++;
+    
+    // Generate candidate around warehouse
     const angle = Math.random() * Math.PI * 2;
-    const dist = (0.2 + Math.random() * 0.8) * radius;
-    const lat = WAREHOUSE_COORDS[0] + dist * Math.sin(angle);
-    const lng = WAREHOUSE_COORDS[1] + dist * Math.cos(angle);
-    const id = String(i).padStart(2, '0');
+    const distDeg = (0.1 + Math.random() * 0.9) * maxRadiusDeg;
+    const lat = WAREHOUSE_COORDS[0] + distDeg * Math.sin(angle);
+    const lng = WAREHOUSE_COORDS[1] + distDeg * Math.cos(angle);
+    const coords = [lat, lng];
+    
+    // Check distance to warehouse
+    const distToWarehouse = getDistance(coords, WAREHOUSE_COORDS);
+    if (distToWarehouse < minWarehouseDist) {
+      if (attempts > 800) {
+        minWarehouseDist = Math.max(100, minWarehouseDist - 10);
+      }
+      continue;
+    }
+    
+    // Check distance to other existing orders
+    let tooClose = false;
+    for (const order of orders) {
+      const d = getDistance(coords, order.coords);
+      if (d < minOrderDist) {
+        tooClose = true;
+        break;
+      }
+    }
+    
+    if (tooClose) {
+      if (attempts > 800) {
+        minOrderDist = Math.max(50, minOrderDist - 5);
+      }
+      continue;
+    }
+    
+    const id = String(orders.length + 1).padStart(2, '0');
+    orders.push({
+      id: `#${id}`,
+      coords: coords,
+      completed: false,
+      cumulativeDistance: 0
+    });
+  }
+  
+  // Fallback: fill remaining if retry limit reached
+  while (orders.length < 20) {
+    const angle = Math.random() * Math.PI * 2;
+    const distDeg = (0.2 + Math.random() * 0.8) * maxRadiusDeg;
+    const lat = WAREHOUSE_COORDS[0] + distDeg * Math.sin(angle);
+    const lng = WAREHOUSE_COORDS[1] + distDeg * Math.cos(angle);
+    const id = String(orders.length + 1).padStart(2, '0');
     orders.push({
       id: `#${id}`,
       coords: [lat, lng],
       completed: false,
-      cumulativeDistance: 0 // Will populate during route calculation
+      cumulativeDistance: 0
     });
   }
+  
   return orders;
 }
 
@@ -126,6 +179,12 @@ function resetState() {
   if (appState.animationFrameId !== null) {
     cancelAnimationFrame(appState.animationFrameId);
     appState.animationFrameId = null;
+  }
+
+  // Clear all pending timeouts
+  if (appState.timeouts) {
+    appState.timeouts.forEach(t => clearTimeout(t));
+    appState.timeouts = [];
   }
 
   // Reset markers
@@ -171,6 +230,7 @@ function resetState() {
 
   const dispatchBtn = document.getElementById('dispatch-btn');
   dispatchBtn.textContent = 'Dispatch Orders';
+  dispatchBtn.setAttribute('aria-label', 'Dispatch Orders');
   dispatchBtn.disabled = false;
 }
 
@@ -184,6 +244,7 @@ document.getElementById('dispatch-btn').addEventListener('click', () => {
   appState.dispatchState = 'generating';
   const dispatchBtn = document.getElementById('dispatch-btn');
   dispatchBtn.disabled = true;
+  dispatchBtn.setAttribute('aria-label', 'Dispatching Orders');
   
   const vehicleStatus = document.getElementById('vehicle-status');
   vehicleStatus.textContent = 'PREPARING';
@@ -262,9 +323,10 @@ document.getElementById('dispatch-btn').addEventListener('click', () => {
   }).addTo(map);
 
   // 6. Start simulation loop after map view has adjusted
-  setTimeout(() => {
+  const startTimeout = setTimeout(() => {
     startDispatchSimulation();
   }, 800);
+  appState.timeouts.push(startTimeout);
 });
 
 function startDispatchSimulation() {
@@ -379,17 +441,26 @@ function startDispatchSimulation() {
 
   // Function to set marker completed state (green + checkmark SVG)
   function completeOrder(index) {
-    const badge = document.getElementById(`order-badge-${index}`);
-    const wrapper = document.getElementById(`order-wrapper-${index}`);
-    if (badge && !badge.classList.contains('order-badge-completed')) {
-      badge.classList.add('order-badge-completed');
-      badge.innerHTML = SVG_CHECK;
+    const order = sortedOrders[index];
+    if (order && !order.completed) {
+      order.completed = true;
+
+      const badge = document.getElementById(`order-badge-${index}`);
+      const wrapper = document.getElementById(`order-wrapper-${index}`);
       
-      wrapper.classList.add('success-halo');
-      // Remove halo animation class after completion to save GPU
-      setTimeout(() => {
-        wrapper.classList.remove('success-halo');
-      }, 600);
+      if (badge) {
+        badge.classList.add('order-badge-completed');
+        badge.innerHTML = SVG_CHECK;
+      }
+      
+      if (wrapper) {
+        wrapper.classList.add('success-halo');
+        // Remove halo animation class after completion to save GPU
+        const tId = setTimeout(() => {
+          wrapper.classList.remove('success-halo');
+        }, 600);
+        appState.timeouts.push(tId);
+      }
 
       appState.completedCount += 1;
       document.getElementById('completed-deliveries').textContent = appState.completedCount;
@@ -422,8 +493,18 @@ function startDispatchSimulation() {
     // Enable Re-Dispatch Button
     const dispatchBtn = document.getElementById('dispatch-btn');
     dispatchBtn.textContent = 'Dispatch Again';
+    dispatchBtn.setAttribute('aria-label', 'Dispatch Again');
     dispatchBtn.disabled = false;
   }
 
   appState.animationFrameId = requestAnimationFrame(animationStep);
 }
+
+// Handle window resizing to invalidate map size
+let resizeTimeout;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    map.invalidateSize();
+  }, 100);
+});

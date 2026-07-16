@@ -394,6 +394,10 @@ body {
 }
 
 /* Halo effect on completion */
+.success-halo {
+  position: relative;
+}
+
 .success-halo::before {
   content: '';
   position: absolute;
