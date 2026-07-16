@@ -272,3 +272,195 @@ body {
     height: 400px;
   }
 }
+
+/* Custom Marker Styles */
+.custom-marker {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.marker-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+}
+
+/* Warehouse style */
+.warehouse-badge {
+  background-color: #ffffff;
+  border: 2px solid var(--accent-blue);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.warehouse-badge svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--accent-blue);
+}
+
+/* Truck style */
+.truck-badge {
+  background-color: var(--accent-blue);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* This nested container will be rotated, avoiding overwriting Leaflet's outer coordinate translation */
+.truck-rotator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.08s linear;
+}
+
+.truck-rotator svg {
+  width: 18px;
+  height: 18px;
+  fill: #ffffff;
+}
+
+/* Order Badge: Pending */
+.order-badge {
+  background-color: var(--accent-orange);
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Pulsing Ring for Pending Markers */
+.order-badge::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 2px solid var(--accent-orange);
+  border-radius: 50%;
+  animation: order-pulse 1.8s infinite ease-out;
+}
+
+@keyframes order-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* Order Badge: Completed */
+.order-badge-completed {
+  background-color: var(--accent-green) !important;
+  border-color: #ffffff !important;
+}
+
+.order-badge-completed::after {
+  display: none; /* Turn off orange pulse */
+}
+
+/* Halo effect on completion */
+.success-halo::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 3px solid var(--accent-green);
+  border-radius: 50%;
+  animation: success-burst 0.6s ease-out forwards;
+}
+
+@keyframes success-burst {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+/* Custom Polyline Style */
+.route-polyline {
+  stroke-dasharray: 6 6;
+  animation: dash-flow 20s linear infinite;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -20px;
+  }
+}
+
+/* Accessibility focus outline and reduced-motion */
+button:focus-visible {
+  outline: 3px solid var(--accent-blue-hover);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-badge::after,
+  .success-halo::before,
+  .route-polyline {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  #dispatch-btn:hover,
+  #dispatch-btn:active,
+  .stat-item:hover,
+  .custom-marker:hover,
+  .marker-wrapper:hover,
+  .warehouse-badge:hover,
+  .truck-badge:hover,
+  .order-badge:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .toast-banner.hidden {
+    transform: none !important;
+  }
+}
