@@ -328,7 +328,7 @@ document.getElementById('dispatch-btn').addEventListener('click', () => {
   }).addTo(map);
 
   appState.routePolyline = L.polyline([WAREHOUSE_COORDS], {
-    color: '#2563eb',
+    color: '#00e5ff', // Bright cyan for high-contrast visibility on satellite tiles
     weight: 4,
     opacity: 1,
     className: 'route-polyline'
