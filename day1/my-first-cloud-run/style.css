@@ -293,6 +293,7 @@ body {
 
 /* Warehouse style */
 .warehouse-badge {
+  position: relative;
   background-color: #ffffff;
   border: 2px solid var(--accent-blue);
   border-radius: 50%;
@@ -312,6 +313,7 @@ body {
 
 /* Truck style */
 .truck-badge {
+  position: relative;
   background-color: var(--accent-blue);
   border: 2px solid #ffffff;
   border-radius: 50%;
