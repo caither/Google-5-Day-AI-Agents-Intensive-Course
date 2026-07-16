@@ -55,6 +55,18 @@
             <span class="status-label">Vehicle Status</span>
             <span id="vehicle-status" class="status-value idle">IDLE</span>
           </div>
+          <div class="status-item status-item-stacked">
+            <span class="status-label">City Distribution</span>
+            <span id="city-distribution" class="status-detail">Taipei 0 · New Taipei 0 · Keelung 0</span>
+          </div>
+          <div class="status-item status-item-stacked">
+            <span class="status-label">Route Summary</span>
+            <span id="route-summary" class="status-detail">-</span>
+          </div>
+        </div>
+
+        <div id="route-warning" class="route-warning hidden" role="status">
+          SIMULATION ROUTE — live road routing unavailable
         </div>
 
         <div id="toast-banner" class="toast-banner hidden" role="status" aria-live="polite">
@@ -67,6 +79,6 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Local JS -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20260716-2"></script>
 </body>
 </html>
