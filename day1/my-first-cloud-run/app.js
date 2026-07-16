@@ -196,6 +196,11 @@ document.getElementById('dispatch-btn').addEventListener('click', () => {
   // 2. Solve Nearest Neighbor Path
   const sortedRoute = solveNearestNeighbor(appState.orders);
 
+  // Re-synchronize the id field of the sorted orders to match their sequential visit index
+  sortedRoute.forEach((order, index) => {
+    order.id = `#${String(index + 1).padStart(2, '0')}`;
+  });
+
   // 3. Construct Complete Node List: Warehouse -> Orders... -> Warehouse
   appState.route = [
     { id: 'Warehouse', coords: WAREHOUSE_COORDS },
@@ -262,7 +267,162 @@ document.getElementById('dispatch-btn').addEventListener('click', () => {
   }, 800);
 });
 
-// Animation simulation placeholder (to be implemented in Task 4)
 function startDispatchSimulation() {
-  console.log("startDispatchSimulation: simulation started (stub function).");
+  appState.dispatchState = 'dispatching';
+  
+  const vehicleStatus = document.getElementById('vehicle-status');
+  vehicleStatus.textContent = 'DISPATCHING';
+  vehicleStatus.className = 'status-value dispatching';
+
+  const duration = 5000; // Animation duration in milliseconds
+  let startTime = null;
+  let nextOrderIndex = 0; // Index in the sorted route list
+
+  // Extract sorted orders for distance matching
+  const sortedOrders = appState.route.slice(1, appState.route.length - 1);
+
+  function animationStep(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = timestamp - startTime;
+    const progressRatio = Math.min(elapsed / duration, 1);
+    const currentDistance = progressRatio * appState.totalRouteLength;
+
+    // 1. Locate current coordinate segment
+    let segmentIndex = 0;
+    for (let i = 0; i < appState.segmentDistances.length; i++) {
+      if (currentDistance <= appState.cumulativeDistances[i + 1]) {
+        segmentIndex = i;
+        break;
+      }
+      segmentIndex = i;
+    }
+
+    // 2. Interpolate position within segment
+    const segStartDist = appState.cumulativeDistances[segmentIndex];
+    const segEndDist = appState.cumulativeDistances[segmentIndex + 1];
+    const segLength = appState.segmentDistances[segmentIndex];
+    
+    let segRatio = 0;
+    if (segLength > 0) {
+      segRatio = (currentDistance - segStartDist) / segLength;
+    }
+    segRatio = Math.max(0, Math.min(1, segRatio));
+
+    const fromNode = appState.route[segmentIndex].coords;
+    const toNode = appState.route[segmentIndex + 1].coords;
+
+    const lat = fromNode[0] + (toNode[0] - fromNode[0]) * segRatio;
+    const lng = fromNode[1] + (toNode[1] - fromNode[1]) * segRatio;
+    const currentLatLng = L.latLng(lat, lng);
+
+    // Update Truck Coordinate
+    appState.truckMarker.setLatLng(currentLatLng);
+
+    // Update active order label in the panel
+    if (segmentIndex < appState.route.length - 2) {
+      document.getElementById('active-order').textContent = appState.route[segmentIndex + 1].id;
+    } else {
+      document.getElementById('active-order').textContent = 'Warehouse';
+      if (appState.dispatchState !== 'returning') {
+        appState.dispatchState = 'returning';
+        vehicleStatus.textContent = 'RETURNING';
+        vehicleStatus.className = 'status-value returning';
+      }
+    }
+
+    // Update general progress bar
+    const progressPct = Math.round(progressRatio * 100);
+    document.getElementById('progress-percentage').textContent = `${progressPct}%`;
+    document.getElementById('progress-bar').style.width = `${progressPct}%`;
+
+    // 3. Compute screen space truck rotation
+    const fromPoint = map.latLngToLayerPoint(L.latLng(fromNode));
+    const toPoint = map.latLngToLayerPoint(L.latLng(toNode));
+    const rotationAngle = Math.atan2(
+      toPoint.y - fromPoint.y,
+      toPoint.x - fromPoint.x
+    ) * 180 / Math.PI;
+
+    const truckRotator = document.getElementById('truck-rotator');
+    if (truckRotator) {
+      // SVG icon default orientation is facing right, so no offset is needed.
+      // We override only the inner rotator wrapper styles
+      truckRotator.style.transform = `rotate(${rotationAngle}deg)`;
+    }
+
+    // 4. Update Progressive Polyline (traversed nodes + active position)
+    const traversedCoords = appState.route.slice(0, segmentIndex + 1).map(n => n.coords);
+    traversedCoords.push([lat, lng]);
+    appState.routePolyline.setLatLngs(traversedCoords);
+
+    // 5. Update completed markers (using loop to handle skipped frames)
+    while (
+      nextOrderIndex < sortedOrders.length &&
+      currentDistance >= sortedOrders[nextOrderIndex].cumulativeDistance
+    ) {
+      completeOrder(nextOrderIndex);
+      nextOrderIndex += 1;
+    }
+
+    // 6. Continue loop or finalize
+    if (progressRatio < 1) {
+      appState.animationFrameId = requestAnimationFrame(animationStep);
+    } else {
+      // Complete remaining orders if frame skipped
+      while (nextOrderIndex < sortedOrders.length) {
+        completeOrder(nextOrderIndex);
+        nextOrderIndex += 1;
+      }
+      finalizeSimulation();
+    }
+  }
+
+  // Function to set marker completed state (green + checkmark SVG)
+  function completeOrder(index) {
+    const badge = document.getElementById(`order-badge-${index}`);
+    const wrapper = document.getElementById(`order-wrapper-${index}`);
+    if (badge && !badge.classList.contains('order-badge-completed')) {
+      badge.classList.add('order-badge-completed');
+      badge.innerHTML = SVG_CHECK;
+      
+      wrapper.classList.add('success-halo');
+      // Remove halo animation class after completion to save GPU
+      setTimeout(() => {
+        wrapper.classList.remove('success-halo');
+      }, 600);
+
+      appState.completedCount += 1;
+      document.getElementById('completed-deliveries').textContent = appState.completedCount;
+      announceState(`Order #${String(index + 1).padStart(2, '0')} delivered.`);
+    }
+  }
+
+  // Triggered at 100% traversal
+  function finalizeSimulation() {
+    appState.dispatchState = 'completed';
+    
+    const vehicleStatus = document.getElementById('vehicle-status');
+    vehicleStatus.textContent = 'COMPLETED';
+    vehicleStatus.className = 'status-value completed';
+
+    document.getElementById('active-order').textContent = 'Warehouse';
+    
+    // Rotate truck back to default
+    const truckRotator = document.getElementById('truck-rotator');
+    if (truckRotator) {
+      truckRotator.style.transform = 'rotate(0deg)';
+    }
+
+    // Show completion toast
+    const toast = document.getElementById('toast-banner');
+    toast.classList.remove('hidden');
+    announceState("All deliveries completed");
+
+    // Enable Re-Dispatch Button
+    const dispatchBtn = document.getElementById('dispatch-btn');
+    dispatchBtn.textContent = 'Dispatch Again';
+    dispatchBtn.disabled = false;
+  }
+
+  appState.animationFrameId = requestAnimationFrame(animationStep);
 }
